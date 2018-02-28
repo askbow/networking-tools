@@ -34,7 +34,7 @@ Codes = {"L":"local", "C":"connected", "S":"static", "R":"RIP", "M":"mobile", "B
 
 codesInitial = ["O","R","B","D","EX","i","o","I","E","O*","R*","B*","D*","EX*","i*","o*","I*","E*","O*E1"]
 codesIgnore =  ["S","L","C",]
-ignorelist = ["Codes","external","level","candidate","downloaded","replicated","resort","variably","route","directly","summary","subnetted",]
+ignorelist = ["Codes","external","level","candidate","downloaded","replicated","resort","variably","route","directly","summary",]
 
 def shIPRouteImport(mode="file", fName=""):
     # imports only interesting lines from 'show ip route' output
@@ -69,10 +69,17 @@ def shIProuteParser():
                 if element[pos] in Codes: pos+=1
                 if '/' in element[pos]: # we're looking at 192.0.2.0/24
                     nnet = IPNetwork(element[pos])
-                else: # we're looking at 192.0.2.0 255.255.255.0
-                    nnet = IPNetwork(element[pos] + "/" + element[pos+1])
+                else:
+                    if "." in element[pos+1]:
+                        # we're looking at 192.0.2.0 255.255.255.0
+                        nnet = IPNetwork(element[pos] + "/" + element[pos+1])
+                    else:
+                        # we're looking at 192.0.2.0 [110/250]
+                        # with the mask listed on one of the preceeding lines
+                        nnet = IPNetwork(element[pos] + "/" + mask)
+                        pos -=1
                     pos += 1
-                    adj += 1 # adjust parser position
+                    adj +=1
                 result[nnet] = list()
                 if le > 3+adj: # nexthop on the same line
                     nh = dict()
@@ -82,10 +89,15 @@ def shIProuteParser():
                 else: # nexthops are listed on subsequent lines
                     tempNet = nnet
             else:
+                if 'subnetted,' in element:
+                    # things like      192.0.2.0/24 is subnetted, 42 subnets
+                    mask = element[0][element[0].find("/")+1:]
+                    continue # no further info on this line
                 #append to prev.route
                 pos = 1
                 if element[pos] in Codes: pos+=1
                 if tempNet in result:
+                    #
                     nh = dict()
                     nh['ip'] = IPAddress(element[pos][:-1])
                     nh['iface'] = element[:-1]
