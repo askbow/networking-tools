@@ -123,7 +123,7 @@ def routeOptimize(routes=list(), mode="simple"):
             result[rr].append({"ip":r, "iface":nhiface[r]})
     return result
 
-def commandSet(mode="full"):
+def commandSet(mode="full", syntax="ciscoios"):
     # prepares a set of commands to instatiate static routes
     # the resulting list can be printed or passed to netmiko [ https://github.com/ktbyers/netmiko ]
     # modes:
@@ -135,11 +135,20 @@ def commandSet(mode="full"):
     elif mode == "long" or mode == "full": routes = shIProuteParser()
     else: return result
     #
+    str = "ip route "
+    if syntax == "ciscoios":
+        str = "ip route "
+    elif syntax == "ciscoasa":
+        str = "route %s"
+    #
     for r in routes:
-        if mode == "short" or mode=="long": result.append("ip route %s %s %s 242"%(r.ip, r.netmask, routes[r][0]["ip"]) )
+        if mode == "short" or mode=="long": 
+            if syntax == "ciscoasa": str = str% routes[r][0]["iface"]
+            result.append(str + " %s %s %s 242"%(r.ip, r.netmask, routes[r][0]["ip"]) )
         if mode == "full":
             for nh in routes[r]:
-                result.append("ip route %s %s %s 242"%(r.ip, r.netmask, nh["ip"]) )
+                if syntax == "ciscoasa": str = str% routes[r][0]["iface"]
+                result.append(str + " %s %s %s 242"%(r.ip, r.netmask, nh["ip"]) )
     #
     return result
 
