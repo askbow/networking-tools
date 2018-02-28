@@ -84,7 +84,7 @@ def shIProuteParser():
                 if le > 3+adj: # nexthop on the same line
                     nh = dict()
                     nh['ip'] = IPAddress(element[pos+3][:-1])
-                    nh['iface'] = element[:-1]
+                    nh['iface'] = element[-1:]
                     result[nnet].append(nh)
                 else: # nexthops are listed on subsequent lines
                     tempNet = nnet
@@ -100,7 +100,7 @@ def shIProuteParser():
                     #
                     nh = dict()
                     nh['ip'] = IPAddress(element[pos][:-1])
-                    nh['iface'] = element[:-1]
+                    nh['iface'] = element[-1:]
                     result[tempNet].append(nh)
         else: #len(element) > 0:
             continue
