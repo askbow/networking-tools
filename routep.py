@@ -34,7 +34,7 @@ Codes = {"L":"local", "C":"connected", "S":"static", "R":"RIP", "M":"mobile", "B
 
 codesInitial = ["O","R","B","D","EX","i","o",]
 codesIgnore =  ["S","L",]
-ignorelist = ["Codes","external","level","candidate","downloaded","replicated","resort","variably","route","directly",]
+ignorelist = ["Codes","external","level","candidate","downloaded","replicated","resort","variably","route","directly","summary"]
 
 def shIPRouteImport(mode="file", fName=""):
     # imports only interesting lines from 'show ip route' output
