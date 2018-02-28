@@ -73,7 +73,10 @@ def shIProuteParser():
                     pos += 1
                 result[nnet] = list()
                 if le > 3: # nexthop on the same line
-                    result[nnet].append(IPAddress(element[pos+3][:-1]))
+                    nh = dict()
+                    nh['ip'] = IPAddress(element[pos+3][:-1])
+                    nh['iface'] = element[:-1]
+                    result[nnet].append(nh)
                 else: # nexthops are listed on subsequent lines
                     tempNet = nnet
             else:
@@ -81,7 +84,10 @@ def shIProuteParser():
                 pos = 1
                 if element[pos] in Codes: pos+=1
                 if tempNet in result:
-                    result[tempNet].append(IPAddress(element[pos][:-1]))
+                    nh = dict()
+                    nh['ip'] = IPAddress(element[pos][:-1])
+                    nh['iface'] = element[:-1]
+                    result[tempNet].append(nh)
         else: #len(element) > 0:
             continue
     return result
@@ -93,10 +99,12 @@ def routeOptimize(routes=list(), mode="simple"):
     if routes==list(): return routes
     result = dict()
     invertRoutes = dict()
+    nhiface = dict()
     for r in routes:
-        if routes[r][0] not in invertRoutes:
-            invertRoutes[routes[r][0]] = list()
-        invertRoutes[routes[r][0]].append(r)
+        if routes[r][0]["ip"] not in invertRoutes:
+            invertRoutes[routes[r][0]["ip"]] = list()
+        invertRoutes[routes[r][0]["ip"]].append(r)
+        nhiface[routes[r][0]["ip"]] = routes[r][0]["iface"]
     maxNH = IPAddress("0.0.0.0")
     maxR = 0
     for r in invertRoutes:
@@ -112,10 +120,10 @@ def routeOptimize(routes=list(), mode="simple"):
         for rr in invertRoutes[r]:
             if rr not in result:
                 result[rr] = list()
-            result[rr].append(r)
+            result[rr].append({"ip":r, "iface":nhiface[r]})
     return result
 
-def commandSet(mode="short"):
+def commandSet(mode="full"):
     # prepares a set of commands to instatiate static routes
     # the resulting list can be printed or passed to netmiko [ https://github.com/ktbyers/netmiko ]
     # modes:
@@ -128,10 +136,10 @@ def commandSet(mode="short"):
     else: return result
     #
     for r in routes:
-        if mode == "short" or mode=="long": result.append("ip route %s %s %s 242"%(r.ip, r.netmask, routes[r][0]) )
+        if mode == "short" or mode=="long": result.append("ip route %s %s %s 242"%(r.ip, r.netmask, routes[r][0]["ip"]) )
         if mode == "full":
             for nh in routes[r]:
-                result.append("ip route %s %s %s 242"%(r.ip, r.netmask, nh) )
+                result.append("ip route %s %s %s 242"%(r.ip, r.netmask, nh["ip"]) )
     #
     return result
 
