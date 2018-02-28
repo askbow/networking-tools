@@ -32,9 +32,9 @@ Codes = {"L":"local", "C":"connected", "S":"static", "R":"RIP", "M":"mobile", "B
        "+":"replicated route", "%":"next hop override","via":"nexthop in next token"}
 
 
-codesInitial = ["O","R","B","D","EX","i","o",]
-codesIgnore =  ["S","L",]
-ignorelist = ["Codes","external","level","candidate","downloaded","replicated","resort","variably","route","directly","summary"]
+codesInitial = ["O","R","B","D","EX","i","o","I","E","O*","R*","B*","D*","EX*","i*","o*","I*","E*","O*E1"]
+codesIgnore =  ["S","L","C",]
+ignorelist = ["Codes","external","level","candidate","downloaded","replicated","resort","variably","route","directly","summary","subnetted",]
 
 def shIPRouteImport(mode="file", fName=""):
     # imports only interesting lines from 'show ip route' output
@@ -65,14 +65,16 @@ def shIProuteParser():
             if element[0] in codesIgnore: continue
             if element[0] in codesInitial:
                 pos = 1
+                adj = 0
                 if element[pos] in Codes: pos+=1
                 if '/' in element[pos]: # we're looking at 192.0.2.0/24
                     nnet = IPNetwork(element[pos])
                 else: # we're looking at 192.0.2.0 255.255.255.0
                     nnet = IPNetwork(element[pos] + "/" + element[pos+1])
                     pos += 1
+                    adj += 1 # adjust parser position
                 result[nnet] = list()
-                if le > 3: # nexthop on the same line
+                if le > 3+adj: # nexthop on the same line
                     nh = dict()
                     nh['ip'] = IPAddress(element[pos+3][:-1])
                     nh['iface'] = element[:-1]
