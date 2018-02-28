@@ -66,11 +66,16 @@ def shIProuteParser():
             if element[0] in codesInitial:
                 pos = 1
                 if element[pos] in Codes: pos+=1
-                result[IPNetwork(element[pos])] = list()
+                if '/' in element[pos]: # we're looking at 192.0.2.0/24
+                    nnet = IPNetwork(element[pos])
+                else: # we're looking at 192.0.2.0 255.255.255.0
+                    nnet = IPNetwork(element[pos] + "/" + element[pos+1])
+                    pos += 1
+                result[nnet] = list()
                 if le > 3: # nexthop on the same line
-                    result[IPNetwork(element[pos])].append(IPAddress(element[pos+3][:-1]))
+                    result[nnet].append(IPAddress(element[pos+3][:-1]))
                 else: # nexthops are listed on subsequent lines
-                    tempNet = IPNetwork(element[pos])
+                    tempNet = nnet
             else:
                 #append to prev.route
                 pos = 1
