@@ -22,7 +22,7 @@ from netaddr import *
 
 ##############################################################
 # code definitions were taken from a Cisco router and might be subject to their copyright
-Codes = {"L":"local", "C":"connected", "S":"static", "R":"RIP", "M":"mobile", "B":"BGP",
+Codes = {"L":"local", "C":"connected", "S":"static", "R":"RIP", "M":"mobile", "B":"BGP", "I":"IGRP", "E":"EGP",
        "D":"EIGRP", "EX":"EIGRP external", "O":"OSPF", "IA":"OSPF inter area", 
        "N1":"OSPF NSSA external type 1", "N2":"OSPF NSSA external type 2",
        "E1":"OSPF external type 1", "E2":"OSPF external type 2",
