@@ -1,4 +1,4 @@
-#!/bin/python
+﻿#!/bin/python
 # -*- coding: utf-8 -*-
 from __future__ import print_function
 from __future__ import unicode_literals
@@ -11,6 +11,7 @@ except ImportError:
 
 import sys
 from netaddr import *
+import re
 
 # routep.py
 # Creates static routes from dinamicly-learned (e.g. OSPF, EIGRP, BGP, RIP) ones
@@ -22,6 +23,7 @@ from netaddr import *
 
 ##############################################################
 # code definitions were taken from a Cisco router and might be subject to their copyright
+# 
 Codes = {"L":"local", "C":"connected", "S":"static", "R":"RIP", "M":"mobile", "B":"BGP", "I":"IGRP", "E":"EGP",
        "D":"EIGRP", "EX":"EIGRP external", "O":"OSPF", "IA":"OSPF inter area", 
        "N1":"OSPF NSSA external type 1", "N2":"OSPF NSSA external type 2",
@@ -33,8 +35,8 @@ Codes = {"L":"local", "C":"connected", "S":"static", "R":"RIP", "M":"mobile", "B
 
 
 codesInitial = ["O","R","B","D","EX","i","o","I","E","O*","R*","B*","D*","EX*","i*","o*","I*","E*","O*E1"]
-codesIgnore =  ["S","L","C",]
-ignorelist = ["Codes","external","level","candidate","downloaded","replicated","resort","variably","route","directly","summary",]
+codesIgnore =  ["S","L","C","S*"]
+ignorelist = ["Codes","external","level","candidate","downloaded","replicated","resort","variably","route","directly","summary","[BEGIN]","[END]","sh ip rou",'<---', 'More', '--->','sh rou']
 
 def shIPRouteImport(mode="file", fName=""):
     # imports only interesting lines from 'show ip route' output
@@ -53,55 +55,85 @@ def shIPRouteImport(mode="file", fName=""):
     else: pass
     return lst
 
-def shIProuteParser():
+def shIProuteParser(source=""):
     # parses 'sh ip routes' into a dictionary of lists, each list containing nexthops for a prefix
     result = dict()
-    lst = shIPRouteImport()
+    lst = shIPRouteImport(fName=source)
     tempNet = IPNetwork("0.0.0.0")
+    mask = '32'
     for l in lst:
         element = l.split()
         le = len(element)
-        if le > 0:
+        if le > 1:
             if element[0] in codesIgnore: continue
-            if element[0] in codesInitial:
+            if element[0] in codesInitial: 
+                # we hit a line with a route in it, i.e.
+                #  O E1 192.0.2.0/24 [110/202] via 192.0.2.1, 42d42h, GigabitEthernet0/0
+                #  B 192.0.2.0/24 [20/0] via 192.0.2.1, 42w42d
                 pos = 1
                 adj = 0
-                if element[pos] in Codes: pos+=1
-                if '/' in element[pos]: # we're looking at 192.0.2.0/24
+                if element[pos] in Codes: pos+=1 # for cases like 'O E1'
+                # we don't care about the source of the route past this point:
+                clear = " ".join(element[pos:])
+                # find prefix:
+                ca = re.compile('^\d{1,3}(\.\d{1,3}){3}\/\d{1,2}$')
+                if ca.match(element[pos]): # we're looking at 192.0.2.0/24
                     nnet = IPNetwork(element[pos])
                 else:
-                    if "." in element[pos+1]:
-                        # we're looking at 192.0.2.0 255.255.255.0
+                    ca = re.compile('^\d{1,3}(\.\d{1,3}){3} \d{1,3}(\.\d{1,3}){3}')
+                    if ca.match(clear): # we're looking for 192.0.2.0 255.255.255.0
                         nnet = IPNetwork(element[pos] + "/" + element[pos+1])
-                    else:
-                        # we're looking at 192.0.2.0 [110/250]
-                        # with the mask listed on one of the preceeding lines
+                    ca = re.compile('^\d{1,3}(\.\d{1,3}){3} \[\d{1,3}\/\d+\]')
+                    if ca.match(clear): # we're looking at 192.0.2.0 [110/250]
+                        # the mask must've been listed on one of the preceeding lines
                         nnet = IPNetwork(element[pos] + "/" + mask)
                         pos -=1
                     pos += 1
                     adj +=1
+                #
+                # at this point, 'nnet' already stores an IPNetwork object
                 result[nnet] = list()
-                if le > 3+adj: # nexthop on the same line
+                #
+                # find nexthop:
+                # check if nexthop is on the same line:
+                # O        192.0.2.0/24 [110/202] via 192.0.2.1, 5w5d, GigabitEthernet0/0
+                ca = re.compile('^\d{1,3}(\.\d{1,3}){3}')
+                c = ca.match(clear[clear.find("via")+4:])
+                if c: 
                     nh = dict()
-                    nh['ip'] = IPAddress(element[pos+3][:-1])
-                    nh['iface'] = element[-1:]
+                    nh['ip'] = IPAddress(c.group())
+                    nh['iface'] = element[-1:] # interface is always listed last
                     result[nnet].append(nh)
                 else: # nexthops are listed on subsequent lines
                     tempNet = nnet
+                    continue
             else:
+                # hadle special cases
+                #
+                # 
                 if 'subnetted,' in element:
-                    # things like      192.0.2.0/24 is subnetted, 42 subnets
-                    mask = element[0][element[0].find("/")+1:]
-                    continue # no further info on this line
-                #append to prev.route
+                    #   192.0.2.0/24 is subnetted, 42 subnets
+                    # this line contains the mask for several subsequent lines
+                    ca = re.compile('^\d{1,3}(\.\d{1,3}){3}\/\d{1,2}')
+                    c = ca.match(" ".join(element)).group() # we're looking at 192.0.2.0/24
+                    mask = c[c.find("/")+1:]
+                    continue # no more usable info on this line
+                #
+                # the line contains a nexthop for a previous line, something like this:
+                # O        192.0.2.0/24 
+                #             [110/2] via 192.0.2.1, 4w5d, GigabitEthernet0/0
+                #             [110/2] via 192.0.2.2, 4w5d, GigabitEthernet0/0
                 pos = 1
                 if element[pos] in Codes: pos+=1
+                clear = " ".join(element[pos:])
                 if tempNet in result:
-                    #
-                    nh = dict()
-                    nh['ip'] = IPAddress(element[pos][:-1])
-                    nh['iface'] = element[-1:]
-                    result[tempNet].append(nh)
+                    ca = re.compile('^\d{1,3}(\.\d{1,3}){3}')
+                    c = ca.match(clear[clear.find("via")+4:])
+                    if c: 
+                        nh = dict()
+                        nh['ip'] = IPAddress(c.group())
+                        nh['iface'] = element[-1:] # interface is always listed last
+                        result[nnet].append(nh)
         else: #len(element) > 0:
             continue
     return result
@@ -109,12 +141,13 @@ def shIProuteParser():
 def routeOptimize(routes=list(), mode="simple"):
     # slightly optimizes route table for lenght
     # trade-off: only one next-hop per prefix, adjacent prefixes are merged
-    #            i.e. loss of detailed routing information
+    #            i.e. loss of detailed routing information and load-sharing
     if routes==list(): return routes
     result = dict()
     invertRoutes = dict()
     nhiface = dict()
     for r in routes:
+        if len(routes[r]) < 1: continue # weird case
         if routes[r][0]["ip"] not in invertRoutes:
             invertRoutes[routes[r][0]["ip"]] = list()
         invertRoutes[routes[r][0]["ip"]].append(r)
@@ -126,51 +159,54 @@ def routeOptimize(routes=list(), mode="simple"):
         if len(invertRoutes[r]) > maxR: 
             maxNH = r
             maxR = len(invertRoutes[r])
-    for r in invertRoutes:    
-        if mode == "super": # DANGER! This option may create routing loops
-            if r == maxNH: 
-                result[IPNetwork("0.0.0.0")] = [r]
-                continue
+    for r in invertRoutes:
         for rr in invertRoutes[r]:
             if rr not in result:
                 result[rr] = list()
             result[rr].append({"ip":r, "iface":nhiface[r]})
     return result
 
+
+
 def commandSet(mode="full", syntax="ciscoios"):
     # prepares a set of commands to instatiate static routes
     # the resulting list can be printed or passed to netmiko [ https://github.com/ktbyers/netmiko ]
     # modes:
-    # - short - tries to optimize table lenght by merging adjacent prefixes
+    # - short - tries to optimize table lenght by merging adjacent prefixes in a safe way
     # - long  - one nexthop per original prefix
-    # - full  - all known nexthops for each prefix
+    # - full  - all known nexthops for each prefix'./sh ip route asadown.log','./sh ip route asainet.log',
     result = list()
-    if mode == "short": routes = routeOptimize(shIProuteParser())
-    elif mode == "long" or mode == "full": routes = shIProuteParser()
-    else: return result
-    #
-    str = "ip route "
-    if syntax == "ciscoios":
+    filelist = ["router.txt",]
+    for f in filelist:
+        #
+        if 'asa' in f.lower(): syntax = 'ciscoasa'
+        else: syntax="ciscoios"
+        routes = shIProuteParser(source=f)
+        if mode == "short": routes = routeOptimize(routes)
+        elif mode == "long" or mode == "full": pass
+        else: return result
+        #
         str = "ip route "
-    elif syntax == "ciscoasa":
-        str = "route %s"
-    #
-    for r in routes:
-        if mode == "short" or mode=="long": 
-            if syntax == "ciscoasa": str = str% routes[r][0]["iface"]
-            result.append(str + " %s %s %s 242"%(r.ip, r.netmask, routes[r][0]["ip"]) )
-        if mode == "full":
+        if syntax == "ciscoios":
+            str = "ip route"
+        elif syntax == "ciscoasa":
+            str = "route"
+        result.append("! Create static routes")
+        result.append("! based on %s"%f)
+        for r in routes:
             for nh in routes[r]:
-                if syntax == "ciscoasa": str = str% routes[r][0]["iface"]
-                result.append(str + " %s %s %s 242"%(r.ip, r.netmask, nh["ip"]) )
-    #
+                i = ""
+                if syntax == "ciscoasa": 
+                    i = nh['iface'][0]
+            result.append(str +' ' +i+ " %s %s %s 253"%(r.ip, r.netmask, nh["ip"]) )
+        result.append("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n\n")
     return result
 
     
 def main():
     #
     cconfig = list()
-    coml = commandSet(mode="full")
+    coml = commandSet(mode="short")
     for c in coml:
         print(c)
     
