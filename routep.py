@@ -34,9 +34,9 @@ Codes = {"L":"local", "C":"connected", "S":"static", "R":"RIP", "M":"mobile", "B
        "+":"replicated route", "%":"next hop override","via":"nexthop in next token"}
 
 
-codesInitial = ["O","R","B","D","EX","i","o","I","E","O*","R*","B*","D*","EX*","i*","o*","I*","E*","O*E1"]
-codesIgnore =  ["S","L","C","S*"]
-ignorelist = ["Codes","external","level","candidate","downloaded","replicated","resort","variably","route","directly","summary","[BEGIN]","[END]","sh ip rou",'<---', 'More', '--->','sh rou','foreign','exit']
+codesInitial = ("O","R","B","D","EX","i","o","I","E","O*","R*","B*","D*","EX*","i*","o*","I*","E*","O*E1")
+codesIgnore =  ("S","L","C","S*")
+ignorelist = ("Codes","external","level","candidate","downloaded","replicated","resort","variably","route","directly","summary","[BEGIN]","[END]","sh ip rou",'<---', 'More', '--->','sh rou','foreign','exit')
 vrfToken = ("Routing Table:")
 
 def shIPRouteImport(mode="file", fName=""):
