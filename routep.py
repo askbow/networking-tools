@@ -38,6 +38,7 @@ codesInitial = ("O","R","B","D","EX","i","o","I","E","O*","R*","B*","D*","EX*","
 codesIgnore =  ("S","L","C","S*")
 ignorelist = ("Codes","external","level","candidate","downloaded","replicated","resort","variably","route","directly","summary","[BEGIN]","[END]","sh ip rou",'<---', 'More', '--->','sh rou','foreign','exit')
 vrfToken = ("Routing Table:")
+emptyLines = ('','\n','\t',' ','  ','   ',)
 
 def shIPRouteImport(mode="file", fName=""):
     # imports only interesting lines from 'show ip route' output
@@ -65,6 +66,7 @@ def shIProuteParser(source=""):
     mask = '32'
     vrf = ""
     for l in lst:
+        if l in emptyLines: continue
         element = l.split()
         le = len(element)
         if le > 1:
@@ -97,7 +99,7 @@ def shIProuteParser(source=""):
                 #
                 # at this point, 'nnet' already stores an IPNetwork object
                 result[nnet] = list()
-                #
+                tempNet = nnet
                 # find nexthop:
                 # check if nexthop is on the same line:
                 # O        192.0.2.0/24 [110/202] via 192.0.2.1, 5w5d, GigabitEthernet0/0
@@ -106,7 +108,8 @@ def shIProuteParser(source=""):
                 if c: 
                     nh = dict()
                     nh['ip'] = IPAddress(c.group())
-                    nh['iface'] = element[-1:] # interface is always listed last
+                    if 'B' in element[0]: nh['iface'] = list()
+                    else: nh['iface'] = element[-1:] # interface is always listed last
                     nh['vrf'] = vrf
                     result[nnet].append(nh)
                 else: # nexthops are listed on subsequent lines
@@ -137,7 +140,8 @@ def shIProuteParser(source=""):
                     if c: 
                         nh = dict()
                         nh['ip'] = IPAddress(c.group())
-                        nh['iface'] = element[-1:] # interface is always listed last
+                        if 'B' in element[0]: nh['iface'] = list()
+                        else: nh['iface'] = element[-1:] # interface is always listed last
                         nh['vrf'] = vrf
                         result[nnet].append(nh)
         else: #len(element) > 0:
