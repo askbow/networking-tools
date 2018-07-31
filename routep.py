@@ -217,6 +217,31 @@ def commandSet(mode="full", syntax="ciscoios"):
         result.append("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n\n")
     return result
 
+def compareRT(fileA,fileB):
+    #
+    routingtableA = shIProuteParser(source=fileA)
+    routingtableB = shIProuteParser(source=fileB)
+    lra = len(routingtableA.keys())
+    lrb = len(routingtableB.keys())
+    if lra > lrb or lrb > lra: print("Number of prefixes differs")
+    for pa in routingtableA:
+        if pa not in routingtableB:
+            for r in routingtableA[pa]:
+                print("not in B",r)
+            continue
+        for r in routingtableA[pa]:
+            if r not in routingtableB[pa]:
+                print("not in A",r)
+    for pb in routingtableB:
+        if pb not in routingtableA:
+            for r in routingtableB[pb]:
+                print("not in A",r)
+            continue
+        for r in routingtableB[pb]:
+            if r not in routingtableA[pb]:
+                print("not in A",r)
+    
+        
     
 def main():
     #
