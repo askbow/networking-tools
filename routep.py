@@ -36,7 +36,8 @@ Codes = {"L":"local", "C":"connected", "S":"static", "R":"RIP", "M":"mobile", "B
 
 codesInitial = ["O","R","B","D","EX","i","o","I","E","O*","R*","B*","D*","EX*","i*","o*","I*","E*","O*E1"]
 codesIgnore =  ["S","L","C","S*"]
-ignorelist = ["Codes","external","level","candidate","downloaded","replicated","resort","variably","route","directly","summary","[BEGIN]","[END]","sh ip rou",'<---', 'More', '--->','sh rou']
+ignorelist = ["Codes","external","level","candidate","downloaded","replicated","resort","variably","route","directly","summary","[BEGIN]","[END]","sh ip rou",'<---', 'More', '--->','sh rou','foreign','exit']
+vrfToken = ("Routing Table:")
 
 def shIPRouteImport(mode="file", fName=""):
     # imports only interesting lines from 'show ip route' output
@@ -46,9 +47,10 @@ def shIPRouteImport(mode="file", fName=""):
         try:
             for line in open(fName):
                 nin = 0
+                if vrfToken[0] in line: lst.append(line[:-1])
                 for a in ignorelist:
                    if a in line: nin +=1
-                if nin < 1 : lst.append(line)
+                if nin < 1 : lst.append(line[:-1]) # slice to remove linebreaks
         except:
             return lst
     #
@@ -61,11 +63,13 @@ def shIProuteParser(source=""):
     lst = shIPRouteImport(fName=source)
     tempNet = IPNetwork("0.0.0.0")
     mask = '32'
+    vrf = ""
     for l in lst:
         element = l.split()
         le = len(element)
         if le > 1:
             if element[0] in codesIgnore: continue
+            if element[0]=="Routing" and element[1]=="Table": vrf=element[2]
             if element[0] in codesInitial: 
                 # we hit a line with a route in it, i.e.
                 #  O E1 192.0.2.0/24 [110/202] via 192.0.2.1, 42d42h, GigabitEthernet0/0
@@ -103,6 +107,7 @@ def shIProuteParser(source=""):
                     nh = dict()
                     nh['ip'] = IPAddress(c.group())
                     nh['iface'] = element[-1:] # interface is always listed last
+                    nh['vrf'] = vrf
                     result[nnet].append(nh)
                 else: # nexthops are listed on subsequent lines
                     tempNet = nnet
@@ -133,6 +138,7 @@ def shIProuteParser(source=""):
                         nh = dict()
                         nh['ip'] = IPAddress(c.group())
                         nh['iface'] = element[-1:] # interface is always listed last
+                        nh['vrf'] = vrf
                         result[nnet].append(nh)
         else: #len(element) > 0:
             continue
@@ -148,22 +154,26 @@ def routeOptimize(routes=list(), mode="simple"):
     nhiface = dict()
     for r in routes:
         if len(routes[r]) < 1: continue # weird case
-        if routes[r][0]["ip"] not in invertRoutes:
-            invertRoutes[routes[r][0]["ip"]] = list()
-        invertRoutes[routes[r][0]["ip"]].append(r)
+        if routes[r][0]["vrf"] not in invertRoutes:
+            invertRoutes[routes[r][0]["vrf"]] = dict()
+        if routes[r][0]["ip"] not in invertRoutes[routes[r][0]["vrf"]]:
+            invertRoutes[routes[r][0]["vrf"]][routes[r][0]["ip"]] = list()
+        invertRoutes[routes[r][0]["vrf"]][routes[r][0]["ip"]].append(r)
         nhiface[routes[r][0]["ip"]] = routes[r][0]["iface"]
     maxNH = IPAddress("0.0.0.0")
     maxR = 0
-    for r in invertRoutes:
-        invertRoutes[r] = cidr_merge(invertRoutes[r])
-        if len(invertRoutes[r]) > maxR: 
-            maxNH = r
-            maxR = len(invertRoutes[r])
-    for r in invertRoutes:
-        for rr in invertRoutes[r]:
-            if rr not in result:
-                result[rr] = list()
-            result[rr].append({"ip":r, "iface":nhiface[r]})
+    for vrf in invertRoutes:
+        for r in invertRoutes[vrf]:
+            invertRoutes[r] = cidr_merge(invertRoutes[vrf][r])
+            if len(invertRoutes[vrf][r]) > maxR: 
+                maxNH = r
+                maxR = len(invertRoutes[vrf][r])
+    for vrf in invertRoutes:
+        for r in invertRoutes[vrf]: 
+            for rr in invertRoutes[r]:
+                if rr not in result:
+                    result[rr] = list()
+                result[rr].append({"vrf":vrf,"ip":r, "iface":nhiface[r]})
     return result
 
 
@@ -193,12 +203,13 @@ def commandSet(mode="full", syntax="ciscoios"):
             str = "route"
         result.append("! Create static routes")
         result.append("! based on %s"%f)
+        i = " "
         for r in routes:
             for nh in routes[r]:
                 i = ""
-                if syntax == "ciscoasa": 
-                    i = nh['iface'][0]
-            result.append(str +' ' +i+ " %s %s %s 253"%(r.ip, r.netmask, nh["ip"]) )
+                if nh['vrf'] > "":       i = i + "vrf " + nh['vrf']
+                if syntax == "ciscoasa": i = i + nh['iface'][0]
+            result.append(str +i+ " %s %s %s 253"%(r.ip, r.netmask, nh["ip"]) )
         result.append("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n\n")
     return result
 
