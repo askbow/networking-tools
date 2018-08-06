@@ -65,6 +65,11 @@ def shIProuteParser(source=""):
     tempNet = IPNetwork("0.0.0.0")
     mask = '32'
     vrf = ""
+    try:
+        import getname
+        names = getname.getname()
+    except ImportError:
+        names = dict()
     for l in lst:
         if l in emptyLines: continue
         element = l.split()
@@ -112,7 +117,20 @@ def shIProuteParser(source=""):
                     else: nh['iface'] = element[-1:] # interface is always listed last
                     nh['vrf'] = vrf
                     result[nnet].append(nh)
-                else: # nexthops are listed on subsequent lines
+                else: 
+                    # let's see if we can resolve a name here:
+                    subline = clear[clear.find("via")+4:].split()[0][:-1]
+                    if subline in names.keys():
+                        #print(nnet, "==> 172.21.255.165")
+                        nh = dict()
+                        nh['ip'] = IPAddress(names[subline])
+                        nh['iface'] = element[-1:] # interface is always listed last
+                        if 'B' in element[0]: nh['iface'] = list()
+                        nh['vrf'] = vrf
+                        #print("+add nexthop",nh)
+                        result[nnet].append(nh)
+                        continue
+                    # nexthops are listed on subsequent lines
                     tempNet = nnet
                     continue
             else:
@@ -144,6 +162,19 @@ def shIProuteParser(source=""):
                         else: nh['iface'] = element[-1:] # interface is always listed last
                         nh['vrf'] = vrf
                         result[nnet].append(nh)
+                    else:
+                        # let's see if we can resolve a name here:
+                        subline = clear[clear.find("via")+4:].split()[0][:-1]
+                        if subline in names.keys():
+                            #print(nnet, "==> 172.21.255.165")
+                            nh = dict()
+                            nh['ip'] = IPAddress(names[subline])
+                            nh['iface'] = element[-1:] # interface is always listed last
+                            if 'B' in element[0]: nh['iface'] = list()
+                            nh['vrf'] = vrf
+                            #print("+add nexthop",nh)
+                            result[nnet].append(nh)
+                            continue
         else: #len(element) > 0:
             continue
     return result
