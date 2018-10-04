@@ -36,7 +36,7 @@ Codes = {"L":"local", "C":"connected", "S":"static", "R":"RIP", "M":"mobile", "B
 
 codesInitial = ("O","R","B","D","EX","i","o","I","E","O*","R*","B*","D*","EX*","i*","o*","I*","E*","O*E1")
 codesIgnore =  ("S","L","C","S*")
-ignorelist = ("Codes","external","level","candidate","downloaded","replicated","resort","variably","route","directly","summary","[BEGIN]","[END]","sh ip rou",'<---', 'More', '--->','sh rou','foreign','exit')
+ignorelist = ("Codes","EIGRP","external","level","candidate","downloaded","replicated","resort","variably","route","directly","summary","[BEGIN]","[END]","sh ip rou",'<---', 'More', '--->','sh rou','foreign','exit')
 vrfToken = ("Routing Table:")
 emptyLines = ('','\n','\t',' ','  ','   ',)
 
@@ -48,7 +48,7 @@ def shIPRouteImport(mode="file", fName=""):
         try:
             for line in open(fName):
                 nin = 0
-                if vrfToken[0] in line: lst.append(line[:-1])
+                if "Routing" in line: lst.append(line[:-1])
                 for a in ignorelist:
                    if a in line: nin +=1
                 if nin < 1 : lst.append(line[:-1]) # slice to remove linebreaks
@@ -60,6 +60,7 @@ def shIPRouteImport(mode="file", fName=""):
 
 def shIProuteParser(source=""):
     # parses 'sh ip routes' into a dictionary of lists, each list containing nexthops for a prefix
+    __VERBOSE__ = False
     result = dict()
     lst = shIPRouteImport(fName=source)
     tempNet = IPNetwork("0.0.0.0")
@@ -75,6 +76,7 @@ def shIProuteParser(source=""):
         element = l.split()
         le = len(element)
         if le > 1:
+            if __VERBOSE__: print(element)
             if element[0] in codesIgnore: continue
             if element[0]=="Routing" and element[1]=="Table": vrf=element[2]
             if element[0] in codesInitial: 
@@ -87,16 +89,21 @@ def shIProuteParser(source=""):
                 # we don't care about the source of the route past this point:
                 clear = " ".join(element[pos:])
                 # find prefix:
+                
                 ca = re.compile('^\d{1,3}(\.\d{1,3}){3}\/\d{1,2}$')
                 if ca.match(element[pos]): # we're looking at 192.0.2.0/24
                     nnet = IPNetwork(element[pos])
+                    if __VERBOSE__: print("93")
                 else:
+                    if __VERBOSE__: print("96")
                     ca = re.compile('^\d{1,3}(\.\d{1,3}){3} \d{1,3}(\.\d{1,3}){3}')
                     if ca.match(clear): # we're looking for 192.0.2.0 255.255.255.0
+                        if __VERBOSE__: print("99")
                         nnet = IPNetwork(element[pos] + "/" + element[pos+1])
                     ca = re.compile('^\d{1,3}(\.\d{1,3}){3} \[\d{1,3}\/\d+\]')
                     if ca.match(clear): # we're looking at 192.0.2.0 [110/250]
                         # the mask must've been listed on one of the preceeding lines
+                        if __VERBOSE__: print("103")
                         nnet = IPNetwork(element[pos] + "/" + mask)
                         pos -=1
                     pos += 1
@@ -111,6 +118,7 @@ def shIProuteParser(source=""):
                 ca = re.compile('^\d{1,3}(\.\d{1,3}){3}')
                 c = ca.match(clear[clear.find("via")+4:])
                 if c: 
+                    if __VERBOSE__: print("119")
                     nh = dict()
                     nh['ip'] = IPAddress(c.group())
                     if 'B' in element[0]: nh['iface'] = list()
@@ -118,26 +126,29 @@ def shIProuteParser(source=""):
                     nh['vrf'] = vrf
                     result[nnet].append(nh)
                 else: 
+                    if __VERBOSE__: print("127")
                     # let's see if we can resolve a name here:
                     subline = clear[clear.find("via")+4:].split()[0][:-1]
                     if subline in names.keys():
-                        #print(nnet, "==> 172.21.255.165")
+                        if __VERBOSE__: print("131")
                         nh = dict()
                         nh['ip'] = IPAddress(names[subline])
                         nh['iface'] = element[-1:] # interface is always listed last
                         if 'B' in element[0]: nh['iface'] = list()
                         nh['vrf'] = vrf
-                        #print("+add nexthop",nh)
+                        if __VERBOSE__: print("+add nexthop",nh)
                         result[nnet].append(nh)
                         continue
                     # nexthops are listed on subsequent lines
                     tempNet = nnet
                     continue
             else:
+                if __VERBOSE__: print("144")
                 # hadle special cases
                 #
                 # 
                 if 'subnetted,' in element:
+                    if __VERBOSE__: print("149")
                     #   192.0.2.0/24 is subnetted, 42 subnets
                     # this line contains the mask for several subsequent lines
                     ca = re.compile('^\d{1,3}(\.\d{1,3}){3}\/\d{1,2}')
@@ -153,9 +164,11 @@ def shIProuteParser(source=""):
                 if element[pos] in Codes: pos+=1
                 clear = " ".join(element[pos:])
                 if tempNet in result:
+                    if __VERBOSE__: print("165")
                     ca = re.compile('^\d{1,3}(\.\d{1,3}){3}')
-                    c = ca.match(clear[clear.find("via")+4:])
+                    c = ca.match(clear[clear.find("via")+1:])
                     if c: 
+                        if __VERBOSE__: print("169")
                         nh = dict()
                         nh['ip'] = IPAddress(c.group())
                         if 'B' in element[0]: nh['iface'] = list()
@@ -163,10 +176,12 @@ def shIProuteParser(source=""):
                         nh['vrf'] = vrf
                         result[nnet].append(nh)
                     else:
+                        if __VERBOSE__: print("177")
                         # let's see if we can resolve a name here:
-                        subline = clear[clear.find("via")+4:].split()[0][:-1]
+                        subline = clear[clear.find("via")+1:].split()[0][:-1]
+                        if __VERBOSE__: print(subline)
                         if subline in names.keys():
-                            #print(nnet, "==> 172.21.255.165")
+                            if __VERBOSE__: print("181")
                             nh = dict()
                             nh['ip'] = IPAddress(names[subline])
                             nh['iface'] = element[-1:] # interface is always listed last
@@ -203,10 +218,10 @@ def routeOptimize(routes=list(), mode="simple"):
             if len(invertRoutes[vrf][r]) > maxR: 
                 maxNH = r
                 maxR = len(invertRoutes[vrf][r])
-    for vrf in invertRoutes:
-        for r in invertRoutes[vrf]: 
-            for rr in invertRoutes[r]:
-                if rr not in result:
+    for vrf in invertRoutes.copy():
+        for r in invertRoutes[vrf].copy(): 
+            for rr in invertRoutes[r].copy():
+                if rr not in result.copy():
                     result[rr] = list()
                 result[rr].append({"vrf":vrf,"ip":r, "iface":nhiface[r]})
     return result
@@ -243,8 +258,8 @@ def commandSet(mode="full", syntax="ciscoios"):
             for nh in routes[r]:
                 i = ""
                 if nh['vrf'] > "":       i = i + "vrf " + nh['vrf']
-                if syntax == "ciscoasa": i = i + nh['iface'][0]
-            result.append(str +i+ " %s %s %s 253"%(r.ip, r.netmask, nh["ip"]) )
+                if syntax == "ciscoasa": i = i +" "+ nh['iface'][0]
+                result.append(str +i+ " %s %s %s 253"%(r.ip, r.netmask, nh["ip"]) )
         result.append("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n\n")
     return result
 
@@ -277,7 +292,7 @@ def compareRT(fileA,fileB):
 def main():
     #
     cconfig = list()
-    coml = commandSet(mode="short")
+    coml = commandSet(mode="full")
     for c in coml:
         print(c)
     
